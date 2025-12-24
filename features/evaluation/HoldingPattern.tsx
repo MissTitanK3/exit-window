@@ -2,6 +2,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Chip } from "@/features/common/Chip";
 import { usePreDepartureStore } from "@/state";
 
 const daysUntil = (target?: string) => {
@@ -21,7 +22,7 @@ export const HoldingPattern = () => {
   const badge = useMemo(
     () => ({
       label: status === "not-yet" ? "Not yet" : "Window open",
-      style: status === "not-yet" ? "bg-amber-200 text-amber-900" : "bg-emerald-100 text-emerald-800",
+      tone: status === "not-yet" ? "warn" : "positive" as const,
     }),
     [status],
   );
@@ -35,7 +36,9 @@ export const HoldingPattern = () => {
             <h3 className="text-lg font-semibold text-slate-900">Waiting is a valid state</h3>
             <p className="text-sm text-slate-700 leading-6">No automatic progression. Status is set only by you.</p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${badge.style}`}>{badge.label}</span>
+          <Chip tone={badge.tone} variant="soft" size="xs" uppercase>
+            {badge.label}
+          </Chip>
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">

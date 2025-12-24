@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Exit Window
 
-## Getting Started
+Exit Window is a private, offline-first readiness instrument. It helps you plan and track everything needed to open an “exit window” (move, relocation, emergency departure) without sending data to any server.
 
-First, run the development server:
+## What it does
+
+- Summarizes readiness across comms, housing, cash runway, healthcare, dependents, legal, and more.
+- Runs a deterministic evaluation to surface hard blockers, soft blockers, and the earliest plausible window.
+- Tracks risk boundaries, fallback plans, and stabilization (“holding”) mode when you need to pause.
+- Captures snapshots, scoped notes, and exports an offline pack for print/save.
+- Works offline by default: no external network calls are allowed, and data stays in your browser.
+
+## Tech stack
+
+- Next.js 16 (App Router) + React 19
+- Zustand stores for local state persistence
+- Serwist for the service worker build (`service-worker/sw.ts` → `public/sw.js`)
+- TypeScript + ESLint
+
+## Getting started
+
+Prereqs: Node 18+ and pnpm (recommended).
+
+Install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Run the app in dev (no service worker in dev to avoid HMR loops):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open <http://localhost:3000>.
 
-## Learn More
+Type-check/lint:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+pnpm lint
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Build for production (includes service worker) and serve:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm build
+pnpm start
+```
 
-## Deploy on Vercel
+## Offline and privacy model
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- No backend: everything is client-side; data lives in `localStorage` under the key `exit-window-store` (and per-slice keys via `makeStorageKey`). Clear that key to reset.
+- External fetches are blocked by a guard; only same-origin requests are allowed. No first-party APIs are called.
+- Serwist builds a single worker from `service-worker/sw.ts` and registers it in production (see `serwist.config.ts`). Only local assets are cached; no external domains are contacted.
+- In development, any existing service workers are unregistered on load to keep hot-reload stable.
+- A “Quick wipe” button lives at the top of the app to clear all Exit Window data stored locally.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Evaluation logic (short version)
+
+- Hard blockers: legal blockers, healthcare at risk, unsupported dependents, or cash runway under 1 month.
+- Soft blockers: tight runway (<3 months), unstable income, housing notice/lock-in/unknown timing, unknown legal/healthcare/dependents status.
+- If no hard blockers remain, the earliest window is based on housing timing (lease end + notice if present). Output includes reasons and ordered steps.
+
+## Project map
+
+- `app/` – layout and main surface (action cards, drawers, evaluation summary, exports, notes, snapshots).
+- `features/` – UI modules (constraints, evaluation, risk boundaries, stability mode, pre-departure, exports, notes, snapshots).
+- `domain/` – pure logic for constraints and evaluation.
+- `state/` – Zustand stores and hydration helpers.
+- `persistence/` – localStorage wrapper.
+- `service-worker/` – Serwist entry; compiled to `public/sw.js` during build.
+
+## Release checklist
+
+- pnpm lint
+- pnpm build
+- In one terminal, run `pnpm start`; in another, run `pnpm sw:check` (requires Playwright, defaults to <http://localhost:3000>).
+- Manually load the app, toggle devtools offline mode, and confirm the UI still renders (cached by the service worker).
+- Use the Quick wipe control to clear local data and confirm a clean rehydration.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
+
+## Contributing
+
+Issues and PRs are welcome. Please keep the offline-only/privacy guarantees intact when adding features (no external network calls; keep data local by default).

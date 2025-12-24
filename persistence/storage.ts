@@ -2,6 +2,18 @@
 export const storageKey = 'exit-window-store';
 export const makeStorageKey = (suffix: string) => `exit-window-${suffix}`;
 
+// Remove all Exit Window entries from localStorage (used by the quick wipe control).
+export const clearExitWindowStorage = () => {
+  if (typeof window === 'undefined') return;
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const key = window.localStorage.key(i);
+    if (!key) continue;
+    if (key === storageKey || key.startsWith('exit-window-')) keysToRemove.push(key);
+  }
+  keysToRemove.forEach((key) => window.localStorage.removeItem(key));
+};
+
 export const storage = {
   get: <T>(key: string): T | undefined => {
     if (typeof window === 'undefined') return undefined;
@@ -17,7 +29,11 @@ export const storage = {
   },
   set: <T>(key: string, value: T) => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(key, JSON.stringify(value));
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Ignore quota or storage failures to keep the UI responsive.
+    }
   },
   remove: (key: string) => {
     if (typeof window === 'undefined') return;

@@ -1,8 +1,9 @@
 // Shows local persistence status and exposes reset/delete controls.
 "use client";
 
-import { useAppStore, useAppStoreHydration } from "@/state";
 import { useCallback } from "react";
+import { Chip } from "@/features/common/Chip";
+import { useAppStore, useAppStoreHydration } from "@/state";
 
 export const LocalStatePanel = () => {
   const hydrated = useAppStoreHydration();
@@ -39,8 +40,8 @@ export const LocalStatePanel = () => {
           </p>
         </div>
         <div className="flex flex-wrap gap-3 text-sm text-slate-800">
-          <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold">Schema v{appVersion}</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold">Launches: {launchCount}</span>
+          <Chip tone="neutral" variant="soft">Schema v{appVersion}</Chip>
+          <Chip tone="neutral" variant="soft">Launches: {launchCount}</Chip>
         </div>
         <div className="flex flex-wrap gap-3 text-sm">
           <button

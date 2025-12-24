@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTheme } from "next-themes";
 import type { Constraints, ContinuityKey, EvaluationResult } from "@/domain/types";
 import { EvaluationActions } from "@/features/evaluation/EvaluationActions";
 import { EvaluationSummary } from "@/features/evaluation/EvaluationSummary";
@@ -17,6 +18,9 @@ import {
   useConstraintsStore,
   useContinuityStore,
   useEvaluationStore,
+  useAppStore,
+  useAppStoreHydration,
+  useChangeLogStore,
   useModeStore,
   useNotesStore,
   usePreDepartureStore,
@@ -25,31 +29,137 @@ import {
   useStabilityStore,
 } from "@/state";
 import { selectLatestSnapshots } from "@/state/snapshotStore";
-import { ActionCard, ConstraintDrawer, DrawerKey, isConstraintKey, NextStepsDrawer, PanelDrawer, Severity } from "@/features/common/drawers";
+import { ActionCard, ConstraintDrawer, DrawerKey, badgeSoftTone, isConstraintKey, NextStepsDrawer, PanelDrawer, Severity } from "@/features/common/drawers";
 import { ActionCardButton, ActionCardSection } from "@/features/common/ActionCardSection";
+import { Chip } from "@/features/common/Chip";
+import { clearExitWindowStorage } from "@/persistence/storage";
 
 export default function Home() {
   const constraints = useConstraintsStore((state) => state.constraints);
   const updateConstraints = useConstraintsStore((state) => state.updateConstraints);
   const evaluation = useEvaluationStore((state) => state.lastResult);
   const evaluate = useEvaluationStore((state) => state.evaluate);
+  const clearEvaluation = useEvaluationStore((state) => state.clear);
   const preDeparture = usePreDepartureStore((state) => state);
+  const resetPreDeparture = usePreDepartureStore((state) => state.reset);
   const snapshots = useSnapshotStore((state) => state.snapshots);
+  const resetSnapshots = useSnapshotStore((state) => state.resetSnapshots);
   const stability = useStabilityStore((state) => state);
+  const resetStability = useStabilityStore((state) => state.reset);
   const riskBoundaries = useRiskBoundaryStore((state) => state.boundaries);
+  const resetRiskBoundaries = useRiskBoundaryStore((state) => state.reset);
   const notes = useNotesStore((state) => state.notes);
+  const resetNotes = useNotesStore((state) => state.reset);
   const mode = useModeStore((state) => state.mode);
+  const setMode = useModeStore((state) => state.setMode);
   const continuity = useContinuityStore((state) => state.checks);
+  const resetContinuity = useContinuityStore((state) => state.reset);
+  const resetConstraints = useConstraintsStore((state) => state.resetConstraints);
+  const resetChangeLog = useChangeLogStore((state) => state.reset);
+  const deleteAppState = useAppStore((state) => state.deleteState);
+  const hydrated = useAppStoreHydration();
 
   const [nextOpen, setNextOpen] = useState(false);
   const [activeKey, setActiveKey] = useState<DrawerKey | null>(null);
   const [formState, setFormState] = useState<Constraints>(constraints);
+  const [wiping, setWiping] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!evaluation) evaluate();
   }, [evaluation, evaluate]);
 
   const latestSnapshots = useMemo(() => selectLatestSnapshots(snapshots), [snapshots]);
+  const hardBlockersCount = evaluation?.hardBlockers?.length ?? 0;
+  const softBlockersCount = evaluation?.softBlockers?.length ?? 0;
+  const degradingCount = useMemo(() => stability.focuses.filter((f) => f.status === "degrading").length, [stability.focuses]);
+  const nextTimeConstraint = useMemo(() => {
+    const dated = preDeparture.timeConstraints.filter((entry) => entry.targetDate && !Number.isNaN(Date.parse(entry.targetDate)));
+    if (!dated.length) return null;
+    return dated.sort((a, b) => (a.targetDate ?? "").localeCompare(b.targetDate ?? ""))[0];
+  }, [preDeparture.timeConstraints]);
+  const latestSnapshotSummary = latestSnapshots[0]?.summary ?? "";
+
+  const glanceItems: Array<{ key: string; label: string; value: string; note?: string; severity: Severity }> = useMemo(
+    () => {
+      const nextCondition = preDeparture.nextRequiredCondition?.trim();
+      return [
+        {
+          key: "earliestWindow",
+          label: "Earliest window",
+          value: evaluation?.earliestWindow ?? "Run evaluation",
+          note: evaluation?.reasons?.[0],
+          severity: hardBlockersCount ? "danger" : evaluation?.status === "ready" ? "ok" : "warn",
+        },
+        {
+          key: "blockers",
+          label: "Blockers",
+          value: `${hardBlockersCount} hard / ${softBlockersCount} soft`,
+          note:
+            hardBlockersCount > 0
+              ? evaluation?.hardBlockers?.[0]
+              : softBlockersCount > 0
+                ? evaluation?.softBlockers?.[0]
+                : "No blockers recorded.",
+          severity: hardBlockersCount ? "danger" : softBlockersCount ? "warn" : "ok",
+        },
+        {
+          key: "preDeparture",
+          label: "Pre-departure",
+          value: preDeparture.status === "window-open" ? "Window open" : "Not yet",
+          note: preDeparture.topBlockers[0]
+            ? `Top blocker: ${preDeparture.topBlockers[0]}`
+            : nextCondition
+              ? `Next required: ${nextCondition}`
+              : "Add blockers or required steps to open the window.",
+          severity: preDeparture.status === "window-open" ? "ok" : preDeparture.topBlockers.length ? "danger" : "warn",
+        },
+        {
+          key: "time",
+          label: "Next date",
+          value: nextTimeConstraint ? nextTimeConstraint.label : "No time constraints",
+          note: nextTimeConstraint?.targetDate ? `Target: ${nextTimeConstraint.targetDate}` : undefined,
+          severity: nextTimeConstraint ? "warn" : "ok",
+        },
+        {
+          key: "stability",
+          label: "Stability",
+          value: stability.active ? "Holding" : "Planning",
+          note: degradingCount
+            ? `${degradingCount} focus${degradingCount === 1 ? "" : "es"} degrading`
+            : stability.focuses.length
+              ? `${stability.focuses.length} focus items tracked`
+              : "Add what must stay steady while you wait.",
+          severity: degradingCount ? "danger" : stability.active ? "warn" : "ok",
+        },
+        {
+          key: "snapshots",
+          label: "Snapshots",
+          value: snapshots.length ? `${snapshots.length} saved` : "None yet",
+          note: latestSnapshotSummary ? `Latest: ${latestSnapshotSummary}` : "Capture state before making changes.",
+          severity: snapshots.length ? "ok" : "warn",
+        },
+      ];
+    },
+    [
+      degradingCount,
+      evaluation?.earliestWindow,
+      evaluation?.hardBlockers,
+      evaluation?.reasons,
+      evaluation?.softBlockers,
+      evaluation?.status,
+      hardBlockersCount,
+      latestSnapshotSummary,
+      nextTimeConstraint,
+      preDeparture.nextRequiredCondition,
+      preDeparture.status,
+      preDeparture.topBlockers,
+      snapshots.length,
+      softBlockersCount,
+      stability.active,
+      stability.focuses.length,
+    ],
+  );
 
   const cards: ActionCard[] = useMemo(() => {
     const isClear = (key: ContinuityKey) => continuity[key] === "clear";
@@ -476,140 +586,235 @@ export default function Home() {
   const statusSummary = evaluation ? evaluation : (null as EvaluationResult | null);
   const activeTitle = activeKey ? cardByKey.get(activeKey)?.title ?? (activeKey as string) : "";
 
+  const handleQuickWipe = () => {
+    if (!hydrated) return;
+    setConfirmOpen(true);
+  };
+
+  const performQuickWipe = () => {
+    setConfirmOpen(false);
+    setWiping(true);
+    try {
+      resetConstraints();
+      resetContinuity();
+      resetSnapshots();
+      resetPreDeparture();
+      resetStability();
+      resetRiskBoundaries();
+      resetNotes();
+      resetChangeLog();
+      clearEvaluation();
+      setMode("planning");
+      deleteAppState();
+      clearExitWindowStorage();
+      setFormState(useConstraintsStore.getState().constraints);
+      setActiveKey(null);
+      setNextOpen(false);
+    } finally {
+      setWiping(false);
+    }
+  };
+
+  const ThemeToggle = () => {
+    const { resolvedTheme, setTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => setMounted(true), []);
+
+    if (!mounted) return null;
+
+    const isDark = resolvedTheme === "dark";
+    const nextTheme = isDark ? "light" : "dark";
+
+    return (
+      <button
+        type="button"
+        className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+        onClick={() => setTheme(nextTheme)}
+        aria-label={`Switch to ${nextTheme} theme`}
+      >
+        <span>{isDark ? "Switch to light" : "Switch to dark"}</span>
+        <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-white dark:bg-slate-100 dark:text-slate-900">
+          {isDark ? "Dark" : "Light"}
+        </span>
+      </button>
+    );
+  };
+
   return (
-    <main className="flex flex-col gap-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+    <>
+      <main className="flex flex-col gap-4">
+        <section className="rounded-2xl border border-slate-200 bg-card p-3 shadow-sm text-card-foreground dark:border-slate-700 m-auto w-full max-w-4xl text-center">
+          <div className="flex flex-col gap-4 w-full m-auto">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">Exit Window status</p>
+                <h1 className="text-2xl text-center font-semibold text-slate-900 dark:text-slate-100">{statusSummary?.status === "ready" ? "Window is within reach" : "Work remains before exit"}</h1>
+                <p className="text-sm text-slate-700 leading-6 dark:text-slate-300">
+                  {statusSummary?.summary ?? "Track blockers, housing, income, and care here. This stays on your device."}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 text-sm w-full sm:w-auto items-center">
+                <Chip tone={statusSummary?.status === "ready" ? "positive" : "warn"} variant="soft">
+                  {statusSummary?.status === "ready" ? "Ready after soft blockers" : "Not yet ready"}
+                </Chip>
+                <span className="text-slate-600 dark:text-slate-300">{unresolvedCount} items need attention</span>
+                <ThemeToggle />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {glanceItems.map((item) => (
+                <div key={item.key} className={`rounded-xl border px-4 py-3 shadow-sm ${badgeSoftTone[item.severity]}`}>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">{item.label}</p>
+                  <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{item.value}</p>
+                  {item.note ? <p className="text-xs leading-5 text-slate-700 dark:text-slate-300">{item.note}</p> : null}
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-3 w-full justify-center mt-2">
+              <button
+                type="button"
+                className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-900 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-800 dark:bg-rose-900 dark:text-rose-100 dark:hover:bg-rose-800"
+                onClick={handleQuickWipe}
+                disabled={!hydrated || wiping}
+              >
+                {wiping ? "Wiping…" : "Quick wipe"}
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                onClick={() => setNextOpen(true)}
+              >
+                What Is Next
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-6">
+          <div className="flex flex-col items-center justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Exit Window status</p>
-              <h1 className="text-2xl font-semibold text-slate-900">{statusSummary?.status === "ready" ? "Window is within reach" : "Work remains before exit"}</h1>
-              <p className="text-sm text-slate-700 leading-6">
-                {statusSummary?.summary ?? "Track blockers, housing, income, and care here. This stays on your device."}
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Tap a card to update</h2>
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">Bottom drawer opens to edit</span>
+          </div>
+
+          <div className="space-y-4">
+            <ActionCardSection label="Needs watching" accentClass="text-rose-700 dark:text-rose-300">
+              {groupedCards.now.map((card) => (
+                <ActionCardButton key={card.key} card={card} onOpen={handleOpen} />
+              ))}
+            </ActionCardSection>
+
+            <ActionCardSection label="Review regularly" accentClass="text-amber-700 dark:text-amber-300">
+              {groupedCards.often.map((card) => (
+                <ActionCardButton key={card.key} card={card} onOpen={handleOpen} />
+              ))}
+            </ActionCardSection>
+
+            <ActionCardSection label="One-time or infrequent" accentClass="text-slate-600 dark:text-slate-300">
+              {groupedCards.later.map((card) => (
+                <ActionCardButton key={card.key} card={card} onOpen={handleOpen} />
+              ))}
+            </ActionCardSection>
+          </div>
+        </section>
+
+        <NextStepsDrawer
+          open={nextOpen}
+          onClose={() => setNextOpen(false)}
+          workflow={workflow}
+          cardByKey={cardByKey}
+          onOpenKey={handleOpen}
+        />
+        <ConstraintDrawer
+          open={isConstraintKey(activeKey)}
+          activeKey={isConstraintKey(activeKey) ? activeKey : null}
+          formState={formState}
+          setFormState={setFormState}
+          onClose={() => setActiveKey(null)}
+          onSave={saveActive}
+        />
+        <PanelDrawer
+          open={Boolean(activeKey && !isConstraintKey(activeKey))}
+          title={activeTitle}
+          onClose={() => setActiveKey(null)}
+        >
+          {activeKey === "preDeparture" && <PreDepartureStatusPanel />}
+          {activeKey === "stability" && <StabilityModePanel />}
+          {activeKey === "risk" && <RiskBoundaryPanel />}
+          {activeKey === "fallback" && <FallbackRecoveryPanel />}
+          {activeKey === "comms" && <CommsContinuityPanel />}
+          {activeKey === "access" && <AccountAccessPanel />}
+          {activeKey === "belongings" && <BelongingsTriagePanel />}
+          {activeKey === "arrival" && <ArrivalBufferPanel />}
+          {activeKey === "identityInference" && <IdentityInferencePanel />}
+          {activeKey === "cutoffs" && <CutoffDriftPanel />}
+          {activeKey === "addressShadow" && <AddressShadowPanel />}
+          {activeKey === "jurisdiction" && <JurisdictionOverlapPanel />}
+          {activeKey === "mail" && <MailContinuityPanel />}
+          {activeKey === "devices" && <DeviceResiliencePanel />}
+          {activeKey === "cognitive" && <CognitiveLoadPanel />}
+          {activeKey === "supportTested" && <SupportVerificationPanel />}
+          {activeKey === "docsAccess" && <DocumentAccessPanel />}
+          {activeKey === "expectations" && <ExpectationBufferPanel />}
+          {activeKey === "snapshots" && <ReadinessSnapshots />}
+          {activeKey === "notes" && <ScopedNotesPanel />}
+          {activeKey === "evaluation" && (
+            <div className="space-y-4">
+              <EvaluationSummary />
+              <EvaluationActions />
+            </div>
+          )}
+          {activeKey === "export" && (
+            <div className="space-y-4">
+              <PreDepartureExport />
+              <ExportControls />
+            </div>
+          )}
+          {activeKey === "holding" && <HoldingPattern />}
+        </PanelDrawer>
+      </main>
+
+      {confirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-card p-6 shadow-2xl text-card-foreground dark:border-slate-700">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-rose-600 dark:text-rose-300">Danger action</p>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Clear all local data?</h3>
+              <p className="text-sm leading-6 text-slate-700 dark:text-slate-300">
+                This deletes constraints, notes, snapshots, and evaluation data on this device. This cannot be undone.
               </p>
             </div>
-            <div className="flex flex-col items-start gap-2 text-sm">
-              <span className={`rounded-full border px-3 py-1 font-semibold ${statusSummary?.status === "ready" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
-                {statusSummary?.status === "ready" ? "Ready after soft blockers" : "Not yet ready"}
-              </span>
-              <span className="text-slate-600">{unresolvedCount} items need attention</span>
+            <div className="flex flex-wrap justify-end gap-2 text-sm">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 px-4 py-2 font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                onClick={() => setConfirmOpen(false)}
+                disabled={wiping}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-rose-200 bg-rose-600 px-4 py-2 font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60 dark:border-rose-700 dark:bg-rose-700 dark:hover:bg-rose-600"
+                onClick={performQuickWipe}
+                disabled={wiping}
+              >
+                {wiping ? "Wiping…" : "Confirm wipe"}
+              </button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-3 text-sm text-slate-800">
-            <span className="rounded-lg bg-slate-50 px-3 py-1 font-semibold">Pre-departure: {preDeparture.status === "window-open" ? "Window open" : "Not yet"}</span>
-            <span className="rounded-lg bg-slate-50 px-3 py-1 font-semibold">Snapshots: {latestSnapshots.length}</span>
-            <span className="rounded-lg bg-slate-50 px-3 py-1 font-semibold">Session count: {preDeparture.topBlockers.length} blockers logged</span>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-              onClick={() => setNextOpen(true)}
-            >
-              What Is Next
-            </button>
-            <a
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
-              href="#workspace"
-            >
-              Go to workspace
-            </a>
-          </div>
         </div>
-      </section>
-
-      <section className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Quick items</p>
-            <h2 className="text-lg font-semibold text-slate-900">Tap a card to update</h2>
-          </div>
-          <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Bottom drawer opens to edit</span>
-        </div>
-
-        <div className="space-y-4">
-          <ActionCardSection label="Needs watching" accentClass="text-rose-700">
-            {groupedCards.now.map((card) => (
-              <ActionCardButton key={card.key} card={card} onOpen={handleOpen} />
-            ))}
-          </ActionCardSection>
-
-          <ActionCardSection label="Review regularly" accentClass="text-amber-700">
-            {groupedCards.often.map((card) => (
-              <ActionCardButton key={card.key} card={card} onOpen={handleOpen} />
-            ))}
-          </ActionCardSection>
-
-          <ActionCardSection label="One-time or infrequent" accentClass="text-slate-600">
-            {groupedCards.later.map((card) => (
-              <ActionCardButton key={card.key} card={card} onOpen={handleOpen} />
-            ))}
-          </ActionCardSection>
-        </div>
-      </section>
-
-      <NextStepsDrawer
-        open={nextOpen}
-        onClose={() => setNextOpen(false)}
-        workflow={workflow}
-        cardByKey={cardByKey}
-        onOpenKey={handleOpen}
-      />
-      <ConstraintDrawer
-        open={isConstraintKey(activeKey)}
-        activeKey={isConstraintKey(activeKey) ? activeKey : null}
-        formState={formState}
-        setFormState={setFormState}
-        onClose={() => setActiveKey(null)}
-        onSave={saveActive}
-      />
-      <PanelDrawer
-        open={Boolean(activeKey && !isConstraintKey(activeKey))}
-        title={activeTitle}
-        onClose={() => setActiveKey(null)}
-      >
-        {activeKey === "preDeparture" && <PreDepartureStatusPanel />}
-        {activeKey === "stability" && <StabilityModePanel />}
-        {activeKey === "risk" && <RiskBoundaryPanel />}
-        {activeKey === "fallback" && <FallbackRecoveryPanel />}
-        {activeKey === "comms" && <CommsContinuityPanel />}
-        {activeKey === "access" && <AccountAccessPanel />}
-        {activeKey === "belongings" && <BelongingsTriagePanel />}
-        {activeKey === "arrival" && <ArrivalBufferPanel />}
-        {activeKey === "identityInference" && <IdentityInferencePanel />}
-        {activeKey === "cutoffs" && <CutoffDriftPanel />}
-        {activeKey === "addressShadow" && <AddressShadowPanel />}
-        {activeKey === "jurisdiction" && <JurisdictionOverlapPanel />}
-        {activeKey === "mail" && <MailContinuityPanel />}
-        {activeKey === "devices" && <DeviceResiliencePanel />}
-        {activeKey === "cognitive" && <CognitiveLoadPanel />}
-        {activeKey === "supportTested" && <SupportVerificationPanel />}
-        {activeKey === "docsAccess" && <DocumentAccessPanel />}
-        {activeKey === "expectations" && <ExpectationBufferPanel />}
-        {activeKey === "snapshots" && <ReadinessSnapshots />}
-        {activeKey === "notes" && <ScopedNotesPanel />}
-        {activeKey === "evaluation" && (
-          <div className="space-y-4">
-            <EvaluationSummary />
-            <EvaluationActions />
-          </div>
-        )}
-        {activeKey === "export" && (
-          <div className="space-y-4">
-            <PreDepartureExport />
-            <ExportControls />
-          </div>
-        )}
-        {activeKey === "holding" && <HoldingPattern />}
-      </PanelDrawer>
-    </main>
+      ) : null}
+    </>
   );
 }
 
 const InfoPanel = ({ title, items }: { title: string; items: string[] }) => (
   <div className="space-y-3">
-    <p className="text-sm text-slate-700">{title}</p>
-    <ul className="list-disc space-y-2 pl-5 text-sm text-slate-800">
+    <p className="text-sm text-slate-700 dark:text-slate-300">{title}</p>
+    <ul className="list-disc space-y-2 pl-5 text-sm text-slate-800 dark:text-slate-200">
       {items.map((item) => (
         <li key={item}>{item}</li>
       ))}
@@ -623,11 +828,13 @@ const ContinuityToggle = ({ checkKey }: { checkKey: ContinuityKey }) => {
   const isClear = status === "clear";
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+    <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
       <span>{isClear ? "Marked clear" : "Needs attention"}</span>
       <button
         type="button"
-        className={`rounded-lg px-3 py-1 transition ${isClear ? "border border-amber-200 text-amber-800 hover:bg-amber-50" : "border border-emerald-200 text-emerald-800 hover:bg-emerald-50"
+        className={`rounded-lg px-3 py-1 transition ${isClear
+          ? "border border-amber-200 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/25"
+          : "border border-emerald-200 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-100 dark:hover:bg-emerald-900/25"
           }`}
         onClick={() => setStatus(checkKey, isClear ? "open" : "clear")}
       >
