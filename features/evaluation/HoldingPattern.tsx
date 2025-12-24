@@ -2,7 +2,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Chip } from "@/features/common/Chip";
+import { Chip, type ChipTone } from "@/features/common/Chip";
 import { usePreDepartureStore } from "@/state";
 
 const daysUntil = (target?: string) => {
@@ -19,10 +19,10 @@ export const HoldingPattern = () => {
   const nextRequiredCondition = usePreDepartureStore((state) => state.nextRequiredCondition);
   const timeConstraints = usePreDepartureStore((state) => state.timeConstraints);
 
-  const badge = useMemo(
+  const badge = useMemo<{ label: string; tone: ChipTone }>(
     () => ({
       label: status === "not-yet" ? "Not yet" : "Window open",
-      tone: status === "not-yet" ? "warn" : "positive" as const,
+      tone: status === "not-yet" ? "warn" : "positive",
     }),
     [status],
   );
