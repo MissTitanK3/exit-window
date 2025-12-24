@@ -18,6 +18,8 @@ export type ContinuityState = {
 type ContinuityPersistedState = Pick<ContinuityState, 'checks'>;
 
 const initialChecks: Record<ContinuityKey, ContinuityStatus> = {
+  comms: 'open',
+  access: 'open',
   identityInference: 'open',
   cutoffs: 'open',
   addressShadow: 'open',

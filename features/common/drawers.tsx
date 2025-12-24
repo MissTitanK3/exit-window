@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Chip } from "./Chip";
 import type { Constraints } from "@/domain/types";
 
@@ -51,9 +51,9 @@ const ternaryOptions = [
 ];
 
 export const badgeSoftTone: Record<Severity, string> = {
-  ok: "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-100 dark:border-emerald-800",
-  warn: "bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-900/25 dark:text-amber-100 dark:border-amber-800",
-  danger: "bg-rose-50 text-rose-900 border-rose-200 dark:bg-rose-900/25 dark:text-rose-100 dark:border-rose-800",
+  ok: "bg-emerald-50 text-primary border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800",
+  warn: "bg-amber-50 text-primary border-amber-200 dark:bg-amber-900/25  dark:border-amber-800",
+  danger: "bg-rose-50 text-primary border-rose-200 dark:bg-rose-900/25 dark:border-rose-800",
 };
 
 const BottomDrawer = ({
@@ -81,7 +81,7 @@ const BottomDrawer = ({
           </div>
           <button
             type="button"
-            className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-100"
             onClick={onClose}
           >
             Close
@@ -107,13 +107,23 @@ export const NextStepsDrawer = ({
   cardByKey: Map<DrawerKey, ActionCard>;
   onOpenKey: (key: DrawerKey) => void;
 }) => {
+  if (!open) return null;
+  return <NextStepsContent workflow={workflow} cardByKey={cardByKey} onOpenKey={onOpenKey} onClose={onClose} />;
+};
+
+const NextStepsContent = ({
+  workflow,
+  cardByKey,
+  onOpenKey,
+  onClose,
+}: {
+  workflow: Array<{ key: DrawerKey; label: string; description: string }>;
+  cardByKey: Map<DrawerKey, ActionCard>;
+  onOpenKey: (key: DrawerKey) => void;
+  onClose: () => void;
+}) => {
   const [index, setIndex] = useState(0);
 
-  useEffect(() => {
-    if (open) setIndex(0);
-  }, [open]);
-
-  if (!open) return null;
   const total = workflow.length;
   const safeIndex = total ? Math.min(index, total - 1) : 0;
   const currentStep = total ? workflow[safeIndex] : null;
@@ -121,22 +131,25 @@ export const NextStepsDrawer = ({
 
   return (
     <BottomDrawer
-      open={open}
+      open
       title="What Is Next"
-      onClose={onClose}
+      onClose={() => {
+        setIndex(0);
+        onClose();
+      }}
       footer={
         total > 1 ? (
           <div className="flex items-center gap-3">
             <button
               type="button"
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-300"
               onClick={() => setIndex((prev) => (prev === 0 ? total - 1 : prev - 1))}
             >
               Back
             </button>
             <button
               type="button"
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
               onClick={() => setIndex((prev) => (prev + 1) % total)}
             >
               Next
@@ -159,7 +172,7 @@ export const NextStepsDrawer = ({
                   <button
                     key={step.key}
                     type="button"
-                    className={`flex items-center rounded-full min-w-54 border px-3 py-1 text-[11px] font-semibold transition ${c ? badgeSoftTone[c.severity] : badgeSoftTone.warn
+                    className={`flex items-center rounded-full min-w-54 border px-3 py-1 text-[11px] transition ${c ? badgeSoftTone[c.severity] : badgeSoftTone.warn
                       } ${idx === safeIndex ? "ring-2 ring-slate-900/60 dark:ring-slate-100/50" : "hover:border-slate-300 dark:hover:border-slate-600"}`}
                     onClick={() => setIndex(idx)}
                   >
@@ -699,14 +712,14 @@ export const ConstraintDrawer = ({
         <div className="flex gap-3">
           <button
             type="button"
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-primary hover:bg-slate-50 dark:border-slate-300 dark:text-slate-200 dark:hover:bg-slate-800"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-primary hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
             onClick={onSave}
           >
             Save

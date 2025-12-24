@@ -199,7 +199,7 @@ export default function Home() {
     const items: ActionCard[] = [];
     const push = (card: ActionCard) => items.push(card);
 
-    const commsStatus = { status: "Plan comms", severity: "warn" as Severity };
+    const commsStatus = isClear("comms") ? { status: "Ready", severity: "ok" as Severity } : { status: "Plan comms", severity: "warn" as Severity };
     push({
       key: "comms",
       title: "Communications",
@@ -216,7 +216,7 @@ export default function Home() {
       severity: isClear("identityInference") ? "ok" : "warn",
     });
 
-    const accessStatus = { status: "Access unverified", severity: "warn" as Severity };
+    const accessStatus = isClear("access") ? { status: "Verified", severity: "ok" as Severity } : { status: "Access unverified", severity: "warn" as Severity };
     push({
       key: "access",
       title: "Account access",
@@ -833,8 +833,8 @@ const ContinuityToggle = ({ checkKey }: { checkKey: ContinuityKey }) => {
       <button
         type="button"
         className={`rounded-lg px-3 py-1 transition ${isClear
-          ? "border border-amber-200 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/25"
-          : "border border-emerald-200 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-100 dark:hover:bg-emerald-900/25"
+          ? "border border-amber-200 text-primary hover:bg-amber-50 dark:border-amber-700 dark:hover:bg-amber-900/25"
+          : "border border-emerald-200 text-primary hover:bg-emerald-50 dark:border-emerald-700 dark:hover:bg-emerald-900/25"
           }`}
         onClick={() => setStatus(checkKey, isClear ? "open" : "clear")}
       >
@@ -852,7 +852,8 @@ const ContinuityPanel = ({ title, items, checkKey }: { title: string; items: str
 );
 
 const CommsContinuityPanel = () => (
-  <InfoPanel
+  <ContinuityPanel
+    checkKey="comms"
     title="Keep communications and 2FA reachable across the move."
     items={[
       "Port/retain primary number; carry a backup SIM/eSIM.",
@@ -865,7 +866,8 @@ const CommsContinuityPanel = () => (
 );
 
 const AccountAccessPanel = () => (
-  <InfoPanel
+  <ContinuityPanel
+    checkKey="access"
     title="Prove you can sign in even if a device or network fails."
     items={[
       "Test sign-in to work, school, healthcare, and banking portals.",

@@ -8,16 +8,16 @@ export type ChipSize = "sm" | "xs";
 
 const toneClasses: Record<ChipVariant, Record<ChipTone, string>> = {
   soft: {
-    positive: "border border-emerald-400 bg-emerald-100 text-primary dark:border-emerald-700 dark:bg-emerald-900/30",
-    warn: "border border-amber-400 bg-amber-100 text-primary dark:border-amber-700 dark:bg-amber-900/25",
-    danger: "border border-rose-400 bg-rose-100 text-primary dark:border-rose-700 dark:bg-rose-900/25",
-    neutral: "border border-slate-400 bg-slate-200 text-primary dark:border-slate-600 dark:bg-slate-800",
+    positive: "border border-emerald-200 bg-emerald-50 text-primary dark:border-emerald-700 dark:bg-emerald-900/30",
+    warn: "border border-amber-200 bg-amber-50 text-primary dark:border-amber-700 dark:bg-amber-900/25",
+    danger: "border border-rose-200 bg-rose-50 text-primary dark:border-rose-700 dark:bg-rose-900/25",
+    neutral: "border border-slate-300 bg-slate-100 text-primary dark:border-slate-700 dark:bg-slate-800",
   },
   solid: {
-    positive: "border border-emerald-700 bg-emerald-700 text-primary dark:border-emerald-400 dark:bg-emerald-400",
-    warn: "border border-amber-600 bg-amber-500 text-primary dark:border-amber-400 dark:bg-amber-400",
-    danger: "border border-rose-700 bg-rose-700 text-primary dark:border-rose-400 dark:bg-rose-400",
-    neutral: "border border-slate-800 bg-slate-900 text-primary dark:border-slate-200 dark:bg-slate-100",
+    positive: "border border-emerald-700 bg-emerald-700 text-primary dark:border-emerald-300 dark:bg-emerald-300",
+    warn: "border border-amber-600 bg-amber-600 text-primary dark:border-amber-300 dark:bg-amber-300",
+    danger: "border border-rose-700 bg-rose-700 text-primary dark:border-rose-300 dark:bg-rose-300",
+    neutral: "border border-slate-900 bg-slate-950 text-primary dark:border-slate-200 dark:bg-slate-100",
   },
 };
 

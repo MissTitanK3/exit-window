@@ -54,6 +54,8 @@ export type LegalConstraint = {
 };
 
 export type ContinuityKey =
+  | 'comms'
+  | 'access'
   | 'identityInference'
   | 'cutoffs'
   | 'addressShadow'
